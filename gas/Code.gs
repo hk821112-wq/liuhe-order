@@ -1,4 +1,4 @@
-const API_VERSION = '5.1.0';
+const API_VERSION = '5.4.0';
 
 const SHEETS = Object.freeze({
   SETTINGS: '系統設定',
@@ -51,7 +51,7 @@ const STATUS_TRANSITIONS = Object.freeze({
 const PUBLIC_CONFIG_CACHE_KEY = 'PUBLIC_CONFIG_V510';
 const PUBLIC_CONFIG_CACHE_SECONDS = 30;
 const LINE_SESSION_TTL_SECONDS = 6 * 60 * 60;
-const ADMIN_SESSION_TTL_SECONDS = 8 * 60 * 60;
+const ADMIN_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const NOTIFY_MAX_ATTEMPTS = 3;
 
 function doGet() {
@@ -100,6 +100,7 @@ function routeApi_(action, payload) {
     case 'adminRefresh': return getAdminDashboard_(requireAdminSession_(payload.adminToken), 300);
     case 'adminChangePassword': return adminChangePassword_(payload);
     case 'adminShipOrder': return adminShipOrder_(payload);
+    case 'adminUpdateTracking': return adminUpdateTracking_(payload);
     case 'adminCancelOrder': return adminCancelOrder_(payload);
     case 'updateOrderStatus': return updateOrderStatus_(payload);
     case 'updatePaymentVerification': return updatePaymentVerification_(payload);
@@ -728,6 +729,34 @@ function adminChangePassword_(payload) {
   props.setProperties({ ADMIN_PIN: newPin, ADMIN_AUTH_VERSION: nextVersion }, false);
   log_(getSpreadsheet_(), '修改後台密碼', 'ADMIN', '商家已自行修改管理密碼，所有舊登入階段已失效。');
   return { message: '密碼修改成功，請使用新密碼重新登入。' };
+}
+
+function adminUpdateTracking_(payload) {
+  requireAdminSession_(payload.adminToken);
+  const orderNo = cleanText_(payload.orderNo, 30);
+  const trackingNo = cleanText_(payload.trackingNo, 60);
+  if (trackingNo.length < 4) throw appError_('請輸入完整物流單號。', 'TRACKING_REQUIRED');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const ss = getSpreadsheet_();
+    const sheet = ss.getSheetByName(SHEETS.ORDERS);
+    const row = findOrderRow_(sheet, orderNo);
+    if (!row) throw appError_('找不到訂單。', 'ORDER_NOT_FOUND');
+    const values = sheet.getRange(row, 1, 1, ORDER_HEADERS.length).getValues()[0];
+    const status = String(values[2] || '');
+    const oldTrackingNo = String(values[20] || '');
+    if (!['已出貨', '已完成'].includes(status)) throw appError_('只有已出貨訂單可以修改物流單號。', 'ORDER_NOT_SHIPPED');
+    if (trackingNo === oldTrackingNo) return { message: '物流單號沒有變更。', orderNo, trackingNo };
+    const now = new Date();
+    sheet.getRange(row, 21).setValue(trackingNo);
+    sheet.getRange(row, 23).setValue(now);
+    log_(ss, '修改物流單號', orderNo, `${oldTrackingNo || '未填寫'} → ${trackingNo}`);
+    SpreadsheetApp.flush();
+    return { message: '物流單號已更新。', orderNo, trackingNo };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function getAdminAuthVersion_() {

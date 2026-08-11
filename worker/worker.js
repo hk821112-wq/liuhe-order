@@ -1,4 +1,4 @@
-const PUBLIC_ACTIONS = new Set(['systemHealth', 'publicConfig', 'lineSessionCreate', 'createOrder', 'orderByRequestId', 'myOrders', 'paymentInfo', 'confirmTransfer', 'adminLogin', 'adminRefresh', 'adminChangePassword', 'adminShipOrder', 'adminCancelOrder']);
+const PUBLIC_ACTIONS = new Set(['systemHealth', 'publicConfig', 'lineSessionCreate', 'createOrder', 'orderByRequestId', 'myOrders', 'paymentInfo', 'confirmTransfer', 'adminLogin', 'adminRefresh', 'adminChangePassword', 'adminShipOrder', 'adminUpdateTracking', 'adminCancelOrder']);
 
 export default {
   async fetch(request, env) {

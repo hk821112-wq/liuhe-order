@@ -15,16 +15,34 @@ async function init() {
   bindEvents();
   if (isLocalPreview) state.lineSessionToken = 'local-preview';
   restoreCheckoutState();
-  const linePromise = initLine();
-  try {
-    state.config = isLocalPreview || cfg.API_BASE_URL.includes('YOUR-WORKER') ? previewConfig() : await api('publicConfig');
-    state.products = state.config.products || [];
-    $('merchantName').textContent = state.config.merchantName;
-    $('bundlePrice').textContent = `任選三包 ${money(state.config.bundlePrice)}`;
-    renderProducts(); renderCurrent(); updateCart(); updateDelivery();
-  } catch (error) { showError(error.message); }
-  await linePromise;
+  applyConfig(loadCachedConfig() || previewConfig());
   restoreStoreFromUrl();
+  initLine();
+  if (!isLocalPreview && !cfg.API_BASE_URL.includes('YOUR-WORKER')) {
+    api('publicConfig').then(config => { localStorage.setItem('liuhePublicConfig', JSON.stringify(config)); applyConfig(config); }).catch(error => console.warn('商品資料背景同步失敗：', error.message));
+  }
+}
+
+function loadCachedConfig() {
+  try {
+    const config = JSON.parse(localStorage.getItem('liuhePublicConfig') || 'null');
+    return config && Array.isArray(config.products) && config.products.length ? config : null;
+  } catch (_) {
+    localStorage.removeItem('liuhePublicConfig');
+    return null;
+  }
+}
+
+function applyConfig(config) {
+  const selectedId = state.products[state.index]?.id || '';
+  state.config = config;
+  state.products = config.products || [];
+  const selectedIndex = state.products.findIndex(product => product.id === selectedId);
+  if (selectedIndex >= 0) state.index = selectedIndex;
+  if (state.index >= state.products.length) state.index = 0;
+  $('merchantName').textContent = config.merchantName || '六合牛軋糖';
+  $('bundlePrice').textContent = `任選三包 ${money(config.bundlePrice)}`;
+  renderProducts(); renderCurrent(); updateCart(); updateDelivery();
 }
 
 async function initLine() {
@@ -32,7 +50,11 @@ async function initLine() {
   if (!cfg.LIFF_ID || cfg.LIFF_ID.startsWith('YOUR-')) return;
   try {
     await liff.init({ liffId: cfg.LIFF_ID });
-    if (!liff.isLoggedIn()) return;
+    if (!liff.isLoggedIn()) {
+      $('lineLabel').textContent = '登入中…';
+      liff.login({ redirectUri: location.href.split('#')[0] });
+      return;
+    }
     const profile = await liff.getProfile();
     const result = await api('lineSessionCreate', { idToken: liff.getIDToken(), accessToken: liff.getAccessToken() });
     state.lineSessionToken = result.sessionToken; state.lineUser = profile;
