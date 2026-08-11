@@ -7,6 +7,7 @@
   <meta name="description" content="六合牛軋糖店舖 LINE 線上下單" />
   <title>六合牛軋糖｜線上下單</title>
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./checkout.css" />
 </head>
 <body>
   <div id="app" aria-live="polite">
@@ -58,14 +59,13 @@
   <dialog id="checkoutDialog" class="sheet-dialog">
     <form id="checkoutForm" method="dialog">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><div><p class="eyebrow">確認資料</p><h2>完成你的訂單</h2></div><button class="icon-button" value="cancel" aria-label="關閉">×</button></div>
-      <label>真實姓名<input name="customerName" autocomplete="name" minlength="2" maxlength="30" required /></label>
-      <label>手機號碼<input name="phone" inputmode="tel" autocomplete="tel" pattern="09[0-9]{8}" placeholder="09xxxxxxxx" required /></label>
-      <fieldset><legend>配送方式</legend><label class="choice"><input type="radio" name="delivery" value="7-11超商取貨" checked />7-11 超商取貨</label><label class="choice"><input type="radio" name="delivery" value="宅配到府" />宅配到府</label></fieldset>
-      <div id="storeFields" class="conditional-fields"><label>門市名稱<input name="storeName" /></label><label>門市店號<input name="storeCode" /></label><label>門市地址<input name="storeAddress" /></label></div>
-      <div id="homeFields" class="conditional-fields" hidden><label>宅配地址<input name="homeAddress" autocomplete="street-address" /></label></div>
-      <fieldset><legend>付款方式</legend><label class="choice"><input type="radio" name="payment" value="7-11取貨付款" checked />7-11 取貨付款</label><label class="choice"><input type="radio" name="payment" value="轉帳付款" />轉帳付款</label></fieldset>
-      <label>備註<textarea name="note" rows="2" maxlength="300"></textarea></label>
+      <div class="sheet-head"><div><p class="eyebrow">確認資料</p><h2>完成你的訂單</h2><p class="sheet-note">填寫聯絡資料並選擇取貨方式</p></div><button class="icon-button" value="cancel" aria-label="關閉">×</button></div>
+      <section class="form-section" aria-labelledby="contact-title"><h3 id="contact-title">聯絡人</h3><div class="field-grid"><label>真實姓名<input name="customerName" autocomplete="name" minlength="2" maxlength="30" required /></label><label>手機號碼<input name="phone" inputmode="tel" autocomplete="tel" pattern="09[0-9]{8}" placeholder="09xxxxxxxx" required /></label></div></section>
+      <section class="form-section" aria-labelledby="delivery-title"><h3 id="delivery-title">配送方式</h3><div class="segmented"><label><input type="radio" name="delivery" value="7-11超商取貨" checked /><span>7-11 取貨</span></label><label><input type="radio" name="delivery" value="宅配到府" /><span>宅配到府</span></label></div>
+      <div id="storeFields" class="store-picker"><div id="selectedStore" class="selected-store" hidden><div class="store-brand">7-ELEVEN</div><div><strong id="selectedStoreName"></strong><span id="selectedStoreDetail"></span></div></div><button id="selectStoreButton" class="secondary-button" type="button">選擇 7-11 門市</button><p class="field-help">將前往綠界電子地圖，選好門市後會自動返回。</p><input type="hidden" name="storeName" /><input type="hidden" name="storeCode" /><input type="hidden" name="storeAddress" /><input type="hidden" name="storeVerificationToken" /></div>
+      <div id="homeFields" class="conditional-fields" hidden><label>完整宅配地址<input name="homeAddress" autocomplete="street-address" placeholder="縣市、區、路名、門牌與樓層" /></label></div></section>
+      <section class="form-section" aria-labelledby="payment-title"><h3 id="payment-title">付款方式</h3><div class="segmented"><label><input type="radio" name="payment" value="7-11取貨付款" checked /><span>取貨付款</span></label><label><input type="radio" name="payment" value="轉帳付款" /><span>銀行轉帳</span></label></div></section>
+      <section class="form-section optional-section"><label>訂單備註 <span>選填</span><textarea name="note" rows="2" maxlength="300" placeholder="有需要特別告知店家的事項嗎？"></textarea></label></section>
       <input class="honeypot" name="website" tabindex="-1" autocomplete="off" />
       <div class="checkout-total"><span>應付總額</span><strong id="dialogTotal">NT$0</strong></div>
       <button id="submitOrder" class="primary-button" type="submit">送出訂單</button>
@@ -89,4 +89,3 @@
   <script type="module" src="./app.js"></script>
 </body>
 </html>
-
