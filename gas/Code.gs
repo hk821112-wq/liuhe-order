@@ -98,6 +98,8 @@ function routeApi_(action, payload) {
     case 'confirmTransfer': return confirmTransfer_(payload);
     case 'adminLogin': return adminLogin_(payload);
     case 'adminRefresh': return getAdminDashboard_(requireAdminSession_(payload.adminToken), 300);
+    case 'adminShipOrder': return adminShipOrder_(payload);
+    case 'adminCancelOrder': return adminCancelOrder_(payload);
     case 'updateOrderStatus': return updateOrderStatus_(payload);
     case 'updatePaymentVerification': return updatePaymentVerification_(payload);
     case 'retryShipmentNotification': return retryShipmentNotification_(payload);
@@ -690,6 +692,42 @@ function updateOrderStatus_(payload) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function adminShipOrder_(payload) {
+  requireAdminSession_(payload.adminToken);
+  const orderNo = cleanText_(payload.orderNo, 30);
+  const trackingNo = cleanText_(payload.trackingNo, 60);
+  if (trackingNo.length < 4) throw appError_('請輸入完整物流單號後再確認出貨。', 'TRACKING_REQUIRED');
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const ss = getSpreadsheet_(); const sheet = ss.getSheetByName(SHEETS.ORDERS); const row = findOrderRow_(sheet, orderNo);
+    if (!row) throw appError_('找不到訂單。', 'ORDER_NOT_FOUND');
+    const values = sheet.getRange(row, 1, 1, ORDER_HEADERS.length).getValues()[0]; const oldStatus = String(values[2] || '');
+    if (oldStatus === '已取消') throw appError_('已取消訂單不可出貨。', 'ORDER_CANCELLED');
+    const now = new Date();
+    sheet.getRange(row, 3).setValue('已出貨'); sheet.getRange(row, 18).setValue(now); sheet.getRange(row, 19).setValue(new Date(now.getTime() + 60 * 60 * 1000));
+    sheet.getRange(row, 20).setValue('待發送'); sheet.getRange(row, 21).setValue(trackingNo); sheet.getRange(row, 23).setValue(now); sheet.getRange(row, 31).setValue(0); sheet.getRange(row, 32).setValue('');
+    log_(ss, '商家確認出貨', orderNo, `${oldStatus} → 已出貨；物流單號：${trackingNo}`); SpreadsheetApp.flush();
+    return { message: '已標記出貨，物流單號已保存。', orderNo, trackingNo, status: '已出貨' };
+  } finally { lock.releaseLock(); }
+}
+
+function adminCancelOrder_(payload) {
+  requireAdminSession_(payload.adminToken);
+  const orderNo = cleanText_(payload.orderNo, 30); const reason = cleanText_(payload.reason, 200);
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const ss = getSpreadsheet_(); const sheet = ss.getSheetByName(SHEETS.ORDERS); const row = findOrderRow_(sheet, orderNo);
+    if (!row) throw appError_('找不到訂單。', 'ORDER_NOT_FOUND');
+    const values = sheet.getRange(row, 1, 1, ORDER_HEADERS.length).getValues()[0]; const oldStatus = String(values[2] || '');
+    if (oldStatus === '已取消') return { message: '此訂單已取消。', orderNo, status: '已取消' };
+    if (['已出貨', '已完成'].includes(oldStatus)) throw appError_('已出貨訂單不可直接取消，請先處理退貨。', 'SHIPPED_CANNOT_CANCEL');
+    if (String(values[21] || '') !== '是') { restoreInventoryForOrder_(ss, orderNo); sheet.getRange(row, 22).setValue('是'); }
+    const now = new Date(); sheet.getRange(row, 3).setValue('已取消'); sheet.getRange(row, 23).setValue(now);
+    log_(ss, '商家取消訂單', orderNo, reason || '未填寫取消原因'); SpreadsheetApp.flush(); invalidatePublicConfigCache_();
+    return { message: '訂單已取消，庫存已恢復。', orderNo, status: '已取消' };
+  } finally { lock.releaseLock(); }
 }
 
 function updatePaymentVerification_(payload) {

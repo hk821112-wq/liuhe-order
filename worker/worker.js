@@ -1,4 +1,4 @@
-const PUBLIC_ACTIONS = new Set(['systemHealth', 'publicConfig', 'lineSessionCreate', 'createOrder', 'orderByRequestId', 'myOrders', 'paymentInfo', 'confirmTransfer']);
+const PUBLIC_ACTIONS = new Set(['systemHealth', 'publicConfig', 'lineSessionCreate', 'createOrder', 'orderByRequestId', 'myOrders', 'paymentInfo', 'confirmTransfer', 'adminLogin', 'adminRefresh', 'adminShipOrder', 'adminCancelOrder']);
 
 export default {
   async fetch(request, env) {
@@ -13,6 +13,7 @@ export default {
     try {
       const body = await request.json();
       if (!PUBLIC_ACTIONS.has(String(body.action || ''))) return json({ ok: false, error: { message: 'Action not allowed' } }, 403, cors);
+      if (body.action === 'adminLogin') body.payload = { ...(body.payload || {}), clientIp: request.headers.get('CF-Connecting-IP') || '' };
       if (body.action === 'publicConfig') {
         const cache = caches.default;
         const cacheKey = new Request(new URL('/__cache/public-config', request.url), { method: 'GET' });

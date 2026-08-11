@@ -1,0 +1,41 @@
+六合牛軋糖訂單後台部署說明
+============================
+
+完成後網址
+商家後台：https://liuhe-order.pages.dev/admin.html
+買家查詢：https://liuhe-order.pages.dev/orders.html
+商品首頁：https://liuhe-order.pages.dev/
+
+一、Google Apps Script
+1. 開啟原本訂單系統的 Apps Script 專案。
+2. 用此壓縮檔 gas/Code.gs 的內容取代原本 Code.gs。
+3. 儲存。
+4. 點「部署」→「管理部署作業」→編輯。
+5. 版本選「新版本」，執行身分選「我」，存取權限維持原設定。
+6. 按「部署」。網址通常不會改變。
+7. 若尚未設定通知排程，從編輯器手動執行 setupNotificationTrigger() 一次並授權。
+
+二、Cloudflare Worker
+1. 開啟 liuhe-order-gateway Worker。
+2. 用 worker/worker.js 取代原本 Worker 程式。
+3. 確認原有環境變數 GAS_WEB_APP_URL 仍指向 GAS /exec 網址。
+4. 按 Deploy。
+
+三、GitHub / Cloudflare Pages 前端
+1. 將壓縮檔根目錄的所有前端檔案上傳到原 GitHub 專案（不要只傳 admin.html）。
+2. 必須包含 admin.html、admin.css、admin.js、orders.html、orders.css、orders.js。
+3. 等 Cloudflare Pages 自動部署完成。
+4. 開啟 https://liuhe-order.pages.dev/admin.html 測試。
+
+使用規則
+- 商家後台用 GAS Script Property 裡的 ADMIN_PIN 登入。
+- 新訂單在畫面統一顯示「已收到訂單・等待出貨」。
+- 按「確認出貨」前，必須輸入至少 4 個字元的物流單號。
+- 確認後狀態變成「已出貨」，買家可在「我的訂單」看到出貨單號。
+- 取消訂單前會再次確認；取消後保留訂單紀錄並回補庫存。
+- 已出貨訂單不能直接取消，避免錯誤回補庫存；需要先人工處理退貨。
+- 買家訂單頁以 LINE User ID 篩選，只會顯示該買家自己的訂單。
+
+注意
+- 本功能顯示「訂單物流狀態與出貨單號」。若要顯示物流公司即時節點（已到店、配送中等），還需要串接物流商的查件 API。
+- 請勿把 ADMIN_PIN 寫進前端 config.js。
