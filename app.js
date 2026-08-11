@@ -42,7 +42,7 @@ function applyConfig(config) {
   if (state.index >= state.products.length) state.index = 0;
   $('merchantName').textContent = config.merchantName || '六合牛軋糖';
   $('bundlePrice').textContent = `任選三包 ${money(config.bundlePrice)}`;
-  renderProducts(); renderCurrent(); updateCart(); updateDelivery();
+  renderProducts(); renderCurrent(); updateCart();
 }
 
 async function initLine() {
@@ -63,7 +63,7 @@ async function initLine() {
 }
 
 function renderProducts() {
-  $('productOptions').innerHTML = state.products.map((product, i) => `<button class="product-option" type="button" data-product-index="${i}" data-active="${i === state.index}" aria-label="選擇${escapeHtml(product.name)}"><span>${escapeHtml(product.name)}</span><small>${escapeHtml(product.spec)} · ${money(product.price)}</small><b class="option-qty" data-empty="true">0</b></button>`).join('');
+  $('productOptions').innerHTML = state.products.map((product, i) => `<article class="product-card" data-product-index="${i}" role="listitem"><img class="product-card-image" src="${escapeHtml(product.imageUrl || `./assets/product-${(i % 10) + 1}.webp`)}" alt="${escapeHtml(product.name)}商品照片" loading="${i < 2 ? 'eager' : 'lazy'}" decoding="async"><div class="product-card-body"><div class="product-card-top"><div><h3>${escapeHtml(product.name)}</h3><p class="product-card-spec">${escapeHtml(product.spec)}</p></div><span class="product-card-offer">3 包優惠</span></div><p class="product-card-desc">酥脆餅乾與柔軟內餡，適合日常分享與送禮。</p><p class="product-card-price">${money(product.price)}</p><div class="quantity-row"><span>購買數量</span><div class="quantity-control" aria-label="${escapeHtml(product.name)}數量"><button type="button" data-qty-delta="-1" aria-label="減少${escapeHtml(product.name)}一包">−</button><output class="card-qty">${state.quantities[product.id] || 0}</output><button type="button" data-qty-delta="1" aria-label="增加${escapeHtml(product.name)}一包">＋</button></div></div></div></article>`).join('');
 }
 
 function renderCurrent() {
@@ -80,9 +80,11 @@ function renderCurrent() {
 }
 
 function updateProductOptions() {
-  document.querySelectorAll('.product-option').forEach((button, i) => {
-    const product = state.products[i]; const qty = state.quantities[product.id] || 0; const badge = button.querySelector('.option-qty');
-    button.dataset.active = String(i === state.index); button.setAttribute('aria-pressed', String(i === state.index)); badge.textContent = qty; badge.dataset.empty = String(qty === 0);
+  document.querySelectorAll('.product-card').forEach((card, i) => {
+    const product = state.products[i]; const qty = state.quantities[product.id] || 0;
+    card.querySelector('.card-qty').textContent = qty;
+    card.querySelector('[data-qty-delta="-1"]').disabled = qty === 0;
+    card.querySelector('[data-qty-delta="1"]').disabled = qty >= product.stock;
   });
 }
 
@@ -102,12 +104,28 @@ function totals() {
 
 function updateCart() {
   const t = totals(); $('cartCount').textContent = t.qty ? `已選 ${t.qty} 包商品` : '尚未選購'; $('cartTotal').textContent = money(t.subtotal);
-  $('dialogTotal').textContent = money(t.total); $('checkoutButton').disabled = !t.qty || !state.config?.orderOpen;
+  const raw = t.qty * Number(state.config?.singlePrice || 0); const discount = Math.max(0, raw - t.subtotal);
+  $('sideSubtotal').textContent = money(raw); $('sideDiscount').textContent = `− ${money(discount)}`;
+  updateOfferMessage(t.qty); updateDelivery(); $('checkoutButton').disabled = !t.qty || !state.config?.orderOpen;
+}
+
+function updateOfferMessage(qty) {
+  const message = $('offerMessage'); if (!message || !state.config) return;
+  const remainder = qty % 3;
+  if (qty >= 3 && remainder === 0) { message.textContent = `已套用「任選 3 包 ${money(state.config.bundlePrice)}」`; message.dataset.achieved = 'true'; }
+  else { const needed = remainder === 0 ? 3 : 3 - remainder; message.textContent = qty ? `已選 ${qty} 包，再選 ${needed} 包即可享「任選 3 包 ${money(state.config.bundlePrice)}」` : `任選 3 包 ${money(state.config.bundlePrice)}`; message.dataset.achieved = 'false'; }
+}
+
+function renderCheckoutSummary() {
+  if (!state.config) return;
+  const t = totals(); const raw = t.qty * state.config.singlePrice; const discount = Math.max(0, raw - t.subtotal);
+  if ($('summaryItems')) $('summaryItems').innerHTML = state.products.filter(product => (state.quantities[product.id] || 0) > 0).map(product => `<div class="summary-item"><span>${escapeHtml(product.name)} × ${state.quantities[product.id]}</span><b>${money(state.quantities[product.id] * state.config.singlePrice)}</b></div>`).join('') || '<div class="summary-item"><span>尚未選擇商品</span></div>';
+  $('summarySubtotal').textContent = money(raw); $('summaryDiscount').textContent = `− ${money(discount)}`;
 }
 
 function bindEvents() {
   $('minusButton').addEventListener('click', () => changeQty(-1)); $('plusButton').addEventListener('click', () => changeQty(1));
-  $('productOptions').addEventListener('click', (event) => { const button = event.target.closest('[data-product-index]'); if (!button) return; state.index = Number(button.dataset.productIndex); renderCurrent(); });
+  $('productOptions').addEventListener('click', (event) => { const control = event.target.closest('[data-qty-delta]'); if (!control) return; const card = control.closest('[data-product-index]'); state.index = Number(card.dataset.productIndex); changeQty(Number(control.dataset.qtyDelta)); });
   document.addEventListener('dblclick', (event) => event.preventDefault(), { passive: false });
   document.addEventListener('gesturestart', (event) => event.preventDefault(), { passive: false });
   $('lineButton').addEventListener('click', () => { if (!cfg.LIFF_ID || cfg.LIFF_ID.startsWith('YOUR-')) return showError('請先在 config.js 設定 LIFF_ID'); if (!liff.isLoggedIn()) liff.login({ redirectUri: location.href.split('#')[0] }); });
@@ -124,6 +142,10 @@ function updateDelivery() {
   if (home) document.querySelector('input[value="轉帳付款"]').checked = true;
   const t = totals(); const fee = t.subtotal >= state.config.freeShippingThreshold ? 0 : home ? state.config.shippingHome : state.config.shipping711;
   $('dialogTotal').textContent = money(t.subtotal + fee);
+  $('summaryShipping').textContent = fee ? money(fee) : '免運'; $('sideShipping').textContent = fee ? money(fee) : '免運';
+  const remaining = Math.max(0, state.config.freeShippingThreshold - t.subtotal); $('freeShippingText').textContent = remaining ? `再買 ${money(remaining)} 即可免運` : '已享免運';
+  $('freeShippingBar').style.width = `${Math.min(100, state.config.freeShippingThreshold ? (t.subtotal / state.config.freeShippingThreshold) * 100 : 100)}%`;
+  renderCheckoutSummary();
 }
 
 function selectEcpayStore() {
@@ -173,13 +195,14 @@ async function submitOrder(event) {
   button.disabled = true; button.textContent = '正在建立訂單…'; $('formError').textContent = '';
   try {
     const result = await api('createOrder', payload); $('checkoutDialog').close();
-    $('successOrderNo').textContent = result.orderNo; $('successQty').textContent = `${result.totalQty} 包`; $('successTotal').textContent = money(result.total); $('successMessage').textContent = result.successMessage;
+    $('successOrderNo').textContent = result.orderNo; $('successQty').textContent = `${result.totalQty} 包`; $('successPayment').textContent = result.payment || payload.payment; $('successDelivery').textContent = result.delivery || payload.delivery; $('successTotal').textContent = money(result.total); $('successMessage').textContent = result.successMessage;
     $('successDialog').showModal(); state.quantities = {}; sessionStorage.removeItem('liuheCheckout'); updateCart(); renderCurrent();
-  } catch (error) { $('formError').textContent = error.message; }
+  } catch (error) { console.error(error); $('formError').textContent = friendlyOrderError(error); }
   finally { button.disabled = false; button.textContent = '送出訂單'; }
 }
 
 function showError(message) { $('formError').textContent = message; console.error(message); }
+function friendlyOrderError(error) { const message = String(error?.message || ''); return /API|HTTP|Unexpected|Gateway|JSON|fetch/i.test(message) ? '訂單送出失敗，請稍後再試。' : (message || '訂單送出失敗，請稍後再試。'); }
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c])); }
 function previewConfig() {
   return { merchantName: '六合牛軋糖', singlePrice: 200, bundlePrice: 500, shipping711: 60, shippingHome: 120, freeShippingThreshold: 1000, orderOpen: true, products: [
