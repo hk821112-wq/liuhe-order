@@ -39,6 +39,13 @@ npx wrangler deploy
 
 `ALLOWED_ORIGIN` 請在 `worker/wrangler.toml` 改成實際 GitHub Pages 網址。
 
+綠界 7-ELEVEN 電子地圖另需在 Worker 設定：
+
+- `FRONTEND_URL`：正式前端完整網址，例如 `https://liuhe-order.pages.dev/`
+- `ECPAY_MERCHANT_ID`：綠界物流特店編號
+- `ECPAY_LOGISTICS_SUBTYPE`：依核准物流類型填 `UNIMART`（B2C）或 `UNIMARTC2C`（C2C）
+- `ECPAY_MAP_URL`：正式環境使用 `https://logistics.ecpay.com.tw/Express/map`
+
 ## 3. GAS
 
 使用附件中的 GAS 5.1.0 程式，設定 Script Properties：

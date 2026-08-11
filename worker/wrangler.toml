@@ -4,4 +4,7 @@ compatibility_date = "2026-08-11"
 
 [vars]
 ALLOWED_ORIGIN = "https://YOUR-GITHUB-NAME.github.io"
-
+FRONTEND_URL = "https://YOUR-PROJECT.pages.dev/"
+ECPAY_MERCHANT_ID = "YOUR-ECPAY-MERCHANT-ID"
+ECPAY_LOGISTICS_SUBTYPE = "UNIMARTC2C"
+ECPAY_MAP_URL = "https://logistics.ecpay.com.tw/Express/map"

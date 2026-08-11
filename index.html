@@ -2,12 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
   <meta name="theme-color" content="#b9360b" />
   <meta name="description" content="六合牛軋糖店舖 LINE 線上下單" />
   <title>六合牛軋糖｜線上下單</title>
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="./checkout.css" />
+  <link rel="stylesheet" href="./product-picker.css" />
 </head>
 <body>
   <div id="app" aria-live="polite">
@@ -23,11 +24,11 @@
       </header>
 
       <section class="product-stage" aria-label="商品選擇">
-        <div id="productTrack" class="product-track"></div>
-        <div id="productDots" class="product-dots" aria-hidden="true"></div>
+        <img id="productImage" class="product-image" alt="目前選擇的商品" />
       </section>
 
       <section class="product-info">
+        <div><p class="section-label">選擇商品</p><div id="productOptions" class="product-options" role="list"></div></div>
         <div class="product-title-row">
           <div>
             <p id="productSpec" class="spec">200克</p>
@@ -46,7 +47,7 @@
           </div>
         </div>
 
-        <div class="swipe-hint">左右滑動切換商品</div>
+        <div class="selection-hint">先點選商品，再調整購買數量</div>
       </section>
     </main>
 

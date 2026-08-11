@@ -376,10 +376,15 @@ function createOrder_(payload) {
   const storeCode = cleanText_(payload.storeCode, 20);
   const storeAddress = cleanText_(payload.storeAddress, 150);
   const storeVerified = payload.storeVerified === true;
+  const storeVerificationToken = cleanText_(payload.storeVerificationToken, 120);
   const homeAddress = cleanText_(payload.homeAddress, 180);
   if (delivery === '7-11超商取貨') {
     if (!storeVerified || !storeName || !storeCode || !storeAddress) {
       throw appError_('7-11 門市資料未通過電子地圖驗證，請重新選擇門市。', 'STORE_NOT_VERIFIED');
+    }
+    const expectedStoreToken = signValue_(`${storeCode}|${storeName}|${storeAddress}`);
+    if (!storeVerificationToken || !constantTimeStringEqual_(storeVerificationToken, expectedStoreToken)) {
+      throw appError_('7-11 門市驗證已失效，請重新選擇門市。', 'STORE_TOKEN_INVALID');
     }
   } else if (homeAddress.length < 8) {
     throw appError_('請填寫完整宅配地址。', 'INVALID_ADDRESS');

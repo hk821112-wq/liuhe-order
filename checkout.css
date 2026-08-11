@@ -1,6 +1,6 @@
-.sheet-dialog{height:min(94dvh,860px);max-height:94dvh;overflow:hidden}
+.sheet-dialog{width:100vw;max-width:none;height:100dvh;max-height:100dvh;margin:0;border-radius:0;overflow:hidden}
 [hidden]{display:none!important}
-.sheet-dialog form{height:100%;max-height:none;padding:10px 20px calc(118px + env(safe-area-inset-bottom));overscroll-behavior:contain}
+.sheet-dialog form{height:100%;max-height:none;padding:calc(12px + env(safe-area-inset-top)) 20px calc(118px + env(safe-area-inset-bottom));overscroll-behavior:contain}
 .sheet-head{padding-bottom:14px}.sheet-head h2{margin:0;font-size:30px;line-height:1.08;letter-spacing:-.04em}
 .sheet-note{margin:7px 0 0;color:var(--muted);font-size:13px}
 .icon-button{display:grid;place-items:center;width:44px;height:44px;border:1px solid var(--line);border-radius:14px;background:#fffaf2;font-size:26px;line-height:1}
@@ -18,4 +18,4 @@
 .field-help{margin:0;color:var(--muted);font-size:11px;line-height:1.5}.optional-section label>span{font-weight:500;color:var(--muted)}.conditional-fields{display:block;margin-top:12px}
 .checkout-total{position:sticky;bottom:-118px;z-index:2;margin-top:0;background:var(--cream)}.sheet-dialog .primary-button{position:sticky;bottom:calc(-102px + env(safe-area-inset-bottom));z-index:3;margin-top:0;box-shadow:0 -14px 24px var(--cream)}
 @media(min-width:520px){.field-grid{grid-template-columns:1fr 1fr}}
-@media(min-width:760px){.sheet-dialog{height:min(88dvh,780px);margin:auto;border-radius:var(--radius)}}
+@media(min-width:760px){.sheet-dialog{width:min(100vw,720px);height:100dvh;max-height:100dvh;margin:0 auto;border-radius:0}.sheet-dialog form{padding-left:44px;padding-right:44px}}

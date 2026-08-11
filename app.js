@@ -1,7 +1,8 @@
 const cfg = window.APP_CONFIG;
-const state = { config: null, products: [], index: 0, quantities: {}, lineSessionToken: '', lineUser: null, touchStartX: 0, store: null };
+const state = { config: null, products: [], index: 0, quantities: {}, lineSessionToken: '', lineUser: null, store: null };
 const $ = (id) => document.getElementById(id);
 const money = (n) => `NT$${Number(n || 0).toLocaleString('zh-TW')}`;
+const isLocalPreview = ['127.0.0.1', 'localhost'].includes(location.hostname);
 
 async function api(action, payload = {}) {
   const response = await fetch(cfg.API_BASE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, payload }) });
@@ -12,11 +13,11 @@ async function api(action, payload = {}) {
 
 async function init() {
   bindEvents();
-  if (['127.0.0.1', 'localhost'].includes(location.hostname)) state.lineSessionToken = 'local-preview';
+  if (isLocalPreview) state.lineSessionToken = 'local-preview';
   restoreCheckoutState();
   const linePromise = initLine();
   try {
-    state.config = cfg.API_BASE_URL.includes('YOUR-WORKER') ? previewConfig() : await api('publicConfig');
+    state.config = isLocalPreview || cfg.API_BASE_URL.includes('YOUR-WORKER') ? previewConfig() : await api('publicConfig');
     state.products = state.config.products || [];
     $('merchantName').textContent = state.config.merchantName;
     $('bundlePrice').textContent = `任選三包 ${money(state.config.bundlePrice)}`;
@@ -27,6 +28,7 @@ async function init() {
 }
 
 async function initLine() {
+  if (isLocalPreview) { $('lineLabel').textContent = '本機預覽 · 已登入'; return; }
   if (!cfg.LIFF_ID || cfg.LIFF_ID.startsWith('YOUR-')) return;
   try {
     await liff.init({ liffId: cfg.LIFF_ID });
@@ -39,23 +41,33 @@ async function initLine() {
 }
 
 function renderProducts() {
-  $('productTrack').innerHTML = state.products.map((product, i) => `<article class="product-card" aria-label="${escapeHtml(product.name)}"><img src="${escapeHtml(product.imageUrl || `./assets/product-${(i % 10) + 1}.webp`)}" alt="${escapeHtml(product.name)}" ${i ? 'loading="lazy" decoding="async"' : 'fetchpriority="high" decoding="async"'} /></article>`).join('');
-  $('productDots').innerHTML = state.products.map((_, i) => `<i class="${i === 0 ? 'active' : ''}"></i>`).join('');
+  $('productOptions').innerHTML = state.products.map((product, i) => `<button class="product-option" type="button" data-product-index="${i}" data-active="${i === state.index}" aria-label="選擇${escapeHtml(product.name)}"><span>${escapeHtml(product.name)}</span><small>${escapeHtml(product.spec)} · ${money(product.price)}</small><b class="option-qty" data-empty="true">0</b></button>`).join('');
 }
 
 function renderCurrent() {
   if (!state.products.length) return;
   const p = state.products[state.index];
-  $('productTrack').style.transform = `translateX(-${state.index * 100}%)`;
-  [...$('productDots').children].forEach((dot, i) => dot.classList.toggle('active', i === state.index));
+  const image = $('productImage');
+  image.classList.add('is-changing');
+  image.src = p.imageUrl || `./assets/product-${(state.index % 10) + 1}.webp`;
+  image.alt = `${p.name}商品圖`;
+  requestAnimationFrame(() => image.classList.remove('is-changing'));
   $('productName').textContent = p.name; $('productSpec').textContent = p.spec; $('productPrice').textContent = money(p.price);
   $('quantity').textContent = state.quantities[p.id] || 0;
+  updateProductOptions();
+}
+
+function updateProductOptions() {
+  document.querySelectorAll('.product-option').forEach((button, i) => {
+    const product = state.products[i]; const qty = state.quantities[product.id] || 0; const badge = button.querySelector('.option-qty');
+    button.dataset.active = String(i === state.index); button.setAttribute('aria-pressed', String(i === state.index)); badge.textContent = qty; badge.dataset.empty = String(qty === 0);
+  });
 }
 
 function changeQty(delta) {
   const p = state.products[state.index]; if (!p) return;
   state.quantities[p.id] = Math.max(0, Math.min(p.stock, (state.quantities[p.id] || 0) + delta));
-  $('quantity').textContent = state.quantities[p.id]; updateCart();
+  $('quantity').textContent = state.quantities[p.id]; updateProductOptions(); updateCart();
 }
 
 function totals() {
@@ -73,8 +85,9 @@ function updateCart() {
 
 function bindEvents() {
   $('minusButton').addEventListener('click', () => changeQty(-1)); $('plusButton').addEventListener('click', () => changeQty(1));
-  $('productTrack').addEventListener('touchstart', (e) => { state.touchStartX = e.changedTouches[0].clientX; }, { passive: true });
-  $('productTrack').addEventListener('touchend', (e) => { const dx = e.changedTouches[0].clientX - state.touchStartX; if (Math.abs(dx) < 40) return; state.index = Math.max(0, Math.min(state.products.length - 1, state.index + (dx < 0 ? 1 : -1))); renderCurrent(); });
+  $('productOptions').addEventListener('click', (event) => { const button = event.target.closest('[data-product-index]'); if (!button) return; state.index = Number(button.dataset.productIndex); renderCurrent(); });
+  document.addEventListener('dblclick', (event) => event.preventDefault(), { passive: false });
+  document.addEventListener('gesturestart', (event) => event.preventDefault(), { passive: false });
   $('lineButton').addEventListener('click', () => { if (!cfg.LIFF_ID || cfg.LIFF_ID.startsWith('YOUR-')) return showError('請先在 config.js 設定 LIFF_ID'); if (!liff.isLoggedIn()) liff.login({ redirectUri: location.href.split('#')[0] }); });
   $('checkoutButton').addEventListener('click', () => { if (!state.lineSessionToken) return $('lineButton').click(); updateCart(); $('checkoutDialog').showModal(); });
   $('selectStoreButton').addEventListener('click', selectEcpayStore);
