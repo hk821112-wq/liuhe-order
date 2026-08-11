@@ -98,6 +98,7 @@ function routeApi_(action, payload) {
     case 'confirmTransfer': return confirmTransfer_(payload);
     case 'adminLogin': return adminLogin_(payload);
     case 'adminRefresh': return getAdminDashboard_(requireAdminSession_(payload.adminToken), 300);
+    case 'adminChangePassword': return adminChangePassword_(payload);
     case 'adminShipOrder': return adminShipOrder_(payload);
     case 'adminCancelOrder': return adminCancelOrder_(payload);
     case 'updateOrderStatus': return updateOrderStatus_(payload);
@@ -331,7 +332,7 @@ function adminLogin_(payload) {
   }
   cache.remove(key);
   return {
-    adminToken: createSignedSession_('admin', { role: 'admin' }, ADMIN_SESSION_TTL_SECONDS),
+    adminToken: createSignedSession_('admin', { role: 'admin', authVersion: getAdminAuthVersion_() }, ADMIN_SESSION_TTL_SECONDS),
     expiresIn: ADMIN_SESSION_TTL_SECONDS,
     dashboard: getAdminDashboard_({ role: 'admin' }, 300)
   };
@@ -713,6 +714,26 @@ function adminShipOrder_(payload) {
   } finally { lock.releaseLock(); }
 }
 
+function adminChangePassword_(payload) {
+  requireAdminSession_(payload.adminToken);
+  const currentPin = String(payload.currentPin || '');
+  const newPin = String(payload.newPin || '');
+  const confirmPin = String(payload.confirmPin || '');
+  checkAdminPin_(currentPin);
+  if (!/^\d{4,12}$/.test(newPin)) throw appError_('新密碼必須是 4 到 12 位數字。', 'INVALID_NEW_PIN');
+  if (newPin !== confirmPin) throw appError_('兩次輸入的新密碼不一致。', 'PIN_CONFIRM_MISMATCH');
+  if (newPin === currentPin) throw appError_('新密碼不可與目前密碼相同。', 'PIN_NOT_CHANGED');
+  const props = PropertiesService.getScriptProperties();
+  const nextVersion = String(Number(getAdminAuthVersion_()) + 1);
+  props.setProperties({ ADMIN_PIN: newPin, ADMIN_AUTH_VERSION: nextVersion }, false);
+  log_(getSpreadsheet_(), '修改後台密碼', 'ADMIN', '商家已自行修改管理密碼，所有舊登入階段已失效。');
+  return { message: '密碼修改成功，請使用新密碼重新登入。' };
+}
+
+function getAdminAuthVersion_() {
+  return String(PropertiesService.getScriptProperties().getProperty('ADMIN_AUTH_VERSION') || '1');
+}
+
 function adminCancelOrder_(payload) {
   requireAdminSession_(payload.adminToken);
   const orderNo = cleanText_(payload.orderNo, 30); const reason = cleanText_(payload.reason, 200);
@@ -1043,6 +1064,7 @@ function requireLineSession_(token) {
 function requireAdminSession_(token) {
   const session = verifySignedSession_(token, 'admin');
   if (session.role !== 'admin') throw appError_('管理員權限驗證失敗。', 'FORBIDDEN');
+  if (String(session.authVersion || '') !== getAdminAuthVersion_()) throw appError_('登入已失效，請使用目前密碼重新登入。', 'ADMIN_SESSION_REVOKED');
   return session;
 }
 
