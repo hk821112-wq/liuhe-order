@@ -7,8 +7,28 @@ const isLocalPreview = ['127.0.0.1', 'localhost'].includes(location.hostname);
 async function api(action, payload = {}) {
   const response = await fetch(cfg.API_BASE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, payload }) });
   const data = await response.json();
-  if (!response.ok || !data.ok) throw new Error(data?.error?.message || '連線失敗，請稍後再試');
+  if (!response.ok || !data.ok) { const error=new Error(data?.error?.message || '連線失敗，請稍後再試'); error.code=data?.error?.code||''; throw error; }
   return data.result;
+}
+
+async function renewLineSession() {
+  if (isLocalPreview) return true;
+  if (!window.liff || !liff.isLoggedIn()) return false;
+  const result = await api('lineSessionCreate', { idToken: liff.getIDToken(), accessToken: liff.getAccessToken() });
+  state.lineSessionToken = result.sessionToken || '';
+  return Boolean(state.lineSessionToken);
+}
+
+async function createOrderWithSessionRetry(payload) {
+  try { return await api('createOrder', payload); }
+  catch (error) {
+    const expired = ['SESSION_INVALID','SESSION_EXPIRED'].includes(error.code) || /登入狀態.*(?:失效|逾期)/.test(error.message);
+    if (!expired) throw error;
+    const renewed = await renewLineSession();
+    if (!renewed) throw error;
+    payload.lineSessionToken = state.lineSessionToken;
+    return api('createOrder', payload);
+  }
 }
 
 async function init() {
@@ -198,7 +218,7 @@ async function submitOrder(event) {
   Object.assign(payload, { lineSessionToken: state.lineSessionToken, requestId: state.pendingRequestId, storeVerified: delivery === '7-11超商取貨', items: Object.entries(state.quantities).filter(([, qty]) => qty > 0).map(([productId, qty]) => ({ productId, qty })) });
   button.disabled = true; button.textContent = '正在建立訂單…'; $('formError').textContent = '';
   try {
-    const result = await api('createOrder', payload); $('checkoutDialog').close();
+    const result = await createOrderWithSessionRetry(payload); $('checkoutDialog').close();
     $('successOrderNo').textContent = result.orderNo; $('successQty').textContent = `${result.totalQty} 包`; $('successPayment').textContent = result.payment || payload.payment; $('successDelivery').textContent = result.delivery || payload.delivery; $('successTotal').textContent = money(result.total); $('successMessage').textContent = result.successMessage;
     $('successDialog').showModal(); state.quantities = {}; state.pendingRequestId=''; sessionStorage.removeItem('liuheCheckout'); localStorage.removeItem('liuheCart'); updateCart(); renderCurrent();
   } catch (error) { console.error(error); $('formError').textContent = friendlyOrderError(error); }
