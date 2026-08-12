@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#fff8ee">
   <title>我的訂單｜六合牛軋糖</title>
-  <link rel="stylesheet" href="./orders.css">
+  <link rel="stylesheet" href="./orders.css"><link rel="stylesheet" href="./orders-v2.css">
 </head>
 <body>
   <header class="orders-header">
@@ -14,7 +14,7 @@
     <button id="refreshButton" type="button">重新整理</button>
   </header>
   <main class="orders-main">
-    <section id="loadingState" class="state-card"><span class="spinner"></span><h2>正在讀取訂單</h2><p>請稍候，正在確認你的 LINE 身分。</p></section>
+    <section id="loadingState" class="orders-loading"><div class="order-skeleton"><span></span><b></b><i></i><i></i></div><div class="order-skeleton"><span></span><b></b><i></i><i></i></div><p>正在確認你的訂單資料</p></section>
     <section id="emptyState" class="state-card" hidden><span class="state-icon">◎</span><h2>目前沒有訂單</h2><p>完成下單後，訂單進度會顯示在這裡。</p><a class="primary-link" href="./index.html">前往選購</a></section>
     <section id="errorState" class="state-card" hidden><span class="state-icon">!</span><h2>暫時無法讀取</h2><p id="errorMessage">請稍後再試一次。</p><button id="retryButton" class="primary-link" type="button">再試一次</button></section>
     <section id="ordersSection" hidden><p id="memberName" class="member-line"></p><div id="ordersList" class="orders-list"></div></section>
