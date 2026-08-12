@@ -1,5 +1,5 @@
 const cfg = window.APP_CONFIG;
-const state = { config: null, products: [], index: 0, quantities: {}, lineSessionToken: '', lineUser: null, store: null };
+const state = { config: null, products: [], index: 0, quantities: {}, lineSessionToken: '', lineUser: null, store: null, pendingRequestId: '' };
 const $ = (id) => document.getElementById(id);
 const money = (n) => `NT$${Number(n || 0).toLocaleString('zh-TW')}`;
 const isLocalPreview = ['127.0.0.1', 'localhost'].includes(location.hostname);
@@ -91,7 +91,7 @@ function updateProductOptions() {
 function changeQty(delta) {
   const p = state.products[state.index]; if (!p) return;
   state.quantities[p.id] = Math.max(0, Math.min(p.stock, (state.quantities[p.id] || 0) + delta));
-  $('quantity').textContent = state.quantities[p.id]; updateProductOptions(); updateCart();
+  $('quantity').textContent = state.quantities[p.id]; localStorage.setItem('liuheCart',JSON.stringify(state.quantities)); updateProductOptions(); updateCart();
 }
 
 function totals() {
@@ -132,6 +132,7 @@ function bindEvents() {
   $('checkoutButton').addEventListener('click', () => { if (!state.lineSessionToken) return $('lineButton').click(); updateCart(); $('checkoutDialog').showModal(); });
   $('selectStoreButton').addEventListener('click', selectEcpayStore);
   document.querySelectorAll('input[name="delivery"]').forEach(el => el.addEventListener('change', updateDelivery));
+  $('checkoutBack').addEventListener('click', () => { $('checkoutDialog').close(); document.querySelector('.shop-intro')?.scrollIntoView({behavior:'smooth',block:'start'}); });
   $('checkoutForm').addEventListener('submit', submitOrder); $('successClose').addEventListener('click', () => $('successDialog').close());
 }
 
@@ -163,8 +164,10 @@ function saveCheckoutState() {
 function restoreCheckoutState() {
   try {
     const saved = JSON.parse(sessionStorage.getItem('liuheCheckout') || 'null');
+    const cart = JSON.parse(localStorage.getItem('liuheCart') || 'null');
+    if (cart && typeof cart === 'object') state.quantities = cart;
     if (!saved) return;
-    state.quantities = saved.quantities || {};
+    state.quantities = saved.quantities || state.quantities;
     Object.entries(saved.fields || {}).forEach(([name, value]) => {
       const candidates = [...document.querySelectorAll(`[name="${CSS.escape(name)}"]`)];
       const input = candidates.find(el => el.type !== 'radio' || el.value === value);
@@ -191,12 +194,13 @@ async function submitOrder(event) {
   event.preventDefault(); const button = $('submitOrder'); const form = new FormData(event.currentTarget); const delivery = form.get('delivery');
   const payload = Object.fromEntries(form.entries());
   if (delivery === '7-11超商取貨' && !payload.storeVerificationToken) { $('formError').textContent = '請先使用綠界電子地圖選擇 7-11 門市。'; return; }
-  Object.assign(payload, { lineSessionToken: state.lineSessionToken, requestId: crypto.randomUUID().replaceAll('-', ''), storeVerified: delivery === '7-11超商取貨', items: Object.entries(state.quantities).filter(([, qty]) => qty > 0).map(([productId, qty]) => ({ productId, qty })) });
+  if (!state.pendingRequestId) state.pendingRequestId = crypto.randomUUID().replaceAll('-', '');
+  Object.assign(payload, { lineSessionToken: state.lineSessionToken, requestId: state.pendingRequestId, storeVerified: delivery === '7-11超商取貨', items: Object.entries(state.quantities).filter(([, qty]) => qty > 0).map(([productId, qty]) => ({ productId, qty })) });
   button.disabled = true; button.textContent = '正在建立訂單…'; $('formError').textContent = '';
   try {
     const result = await api('createOrder', payload); $('checkoutDialog').close();
     $('successOrderNo').textContent = result.orderNo; $('successQty').textContent = `${result.totalQty} 包`; $('successPayment').textContent = result.payment || payload.payment; $('successDelivery').textContent = result.delivery || payload.delivery; $('successTotal').textContent = money(result.total); $('successMessage').textContent = result.successMessage;
-    $('successDialog').showModal(); state.quantities = {}; sessionStorage.removeItem('liuheCheckout'); updateCart(); renderCurrent();
+    $('successDialog').showModal(); state.quantities = {}; state.pendingRequestId=''; sessionStorage.removeItem('liuheCheckout'); localStorage.removeItem('liuheCart'); updateCart(); renderCurrent();
   } catch (error) { console.error(error); $('formError').textContent = friendlyOrderError(error); }
   finally { button.disabled = false; button.textContent = '送出訂單'; }
 }

@@ -24,7 +24,7 @@
     <section id="dashboard" hidden>
       <div id="stats" class="stats"></div>
       <nav class="filters" aria-label="訂單篩選"><button data-filter="waiting" data-active="true">等待出貨</button><button data-filter="shipped">已出貨</button><button data-filter="cancelled">已取消</button></nav>
-      <div class="toolbar"><p id="orderCount"></p><button id="refreshButton" class="text-button">重新整理</button></div>
+      <div class="toolbar"><div><p id="orderCount"></p><small id="lastSync" class="last-sync"></small></div><div class="toolbar-actions"><label class="admin-search"><span class="sr-only">搜尋訂單</span><input id="orderSearch" type="search" placeholder="搜尋訂單、姓名、電話或單號" autocomplete="off"></label><button id="refreshButton" class="text-button">重新整理</button></div></div>
       <div id="orders" class="orders"></div>
     </section>
   </main>
