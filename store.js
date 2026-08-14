@@ -3,8 +3,28 @@ const state={shop:params.get('shop')||'liuhe',data:null,qty:{},requestId:'',last
 const money=n=>`NT$${Number(n||0).toLocaleString('zh-TW')}`;
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 async function api(path,options={}){const r=await fetch(cfg.API_BASE_URL+path,options),d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw new Error(d.error?.message||'連線失敗，請稍後再試');return d.result}
-async function initLine(){if(!cfg.LIFF_ID)throw new Error('尚未設定 LIFF ID');await liff.init({liffId:cfg.LIFF_ID,withLoginOnExternalBrowser:true});if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return false}state.idToken=liff.getIDToken()||'';if(!state.idToken)throw new Error('無法取得 LINE 登入憑證，請重新登入');state.lineProfile=liff.getDecodedIDToken()||{};$('lineUser').textContent=(state.lineProfile.name||'LINE 用戶')+'・已登入';return true}
-async function boot(){const storePromise=init();state.authPromise=initLine();try{await Promise.all([storePromise,state.authPromise])}catch(e){$('lineUser').textContent='LINE 登入失敗';$('products').innerHTML=`<p class="error load-error">${esc(e.message)}<br><button type="button" id="retryLogin">重新登入 LINE</button></p>`;document.getElementById('retryLogin')?.addEventListener('click',()=>{liff.logout();location.reload()})}}
+const withTimeout=(promise,ms,message)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error(message)),ms))]);
+async function initLine(){
+  if(!cfg.LIFF_ID)throw new Error('尚未設定 LIFF ID');
+  $('lineUser').textContent='LINE 登入中…';
+  await withTimeout(liff.init({liffId:cfg.LIFF_ID,withLoginOnExternalBrowser:true}),12000,'LINE 連線逾時，請重新整理');
+  if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return false}
+  state.idToken=liff.getIDToken()||'';
+  if(!state.idToken)throw new Error('無法取得 LINE 登入憑證，請重新登入');
+  const decoded=liff.getDecodedIDToken()||{};
+  let profile={};
+  try{profile=await withTimeout(liff.getProfile(),5000,'')}catch(_){profile={}}
+  state.lineProfile={...decoded,...profile};
+  const displayName=profile.displayName||decoded.name||'LINE 用戶';
+  $('lineUser').textContent=displayName+' ・ LINE 已登入';
+  return true;
+}
+async function boot(){
+  const storePromise=init();
+  state.authPromise=initLine().catch(e=>{$('lineUser').textContent='LINE 登入未完成';throw e});
+  await storePromise;
+  state.authPromise.catch(()=>{});
+}
 async function init(){try{state.data=await api('/api/store?shop='+encodeURIComponent(state.shop));const m=state.data.merchant;document.documentElement.style.setProperty('--accent',m.theme_color||'#994919');document.title=m.name+'｜線上選購';$('storeName').textContent=m.name;$('description').textContent=m.description;$('announcement').textContent=m.announcement;$('announcement').hidden=!m.announcement;$('orderState').textContent=m.order_open?'開放接單':'暫停接單';$('delivery711').hidden=!m.allow_711;$('deliveryHome').hidden=!m.allow_home;const deliveryValue=m.allow_711?'711':'home',first=document.querySelector(`input[name="delivery"][value="${deliveryValue}"]`);if(first)first.checked=true;render();restoreCheckout();delivery();update()}catch(e){$('products').innerHTML=`<p class="error load-error">${esc(e.message)}<br><button type="button" onclick="location.reload()">重新載入</button></p>`}}
 function render(){$('products').innerHTML=state.data.products.map(p=>`<article class="product"><img src="${esc(p.image_url||'')}" alt="${esc(p.name)}" loading="lazy"><div class="product-body"><div><h3>${esc(p.name)}</h3><p class="spec">${esc(p.spec)}</p></div><p>${esc(p.description)}</p><strong class="price">${money(p.price)}</strong><div class="qty"><span>${p.track_stock?`庫存 ${p.stock}`:'現貨'}</span><div><button type="button" data-id="${p.id}" data-d="-1" aria-label="減少數量">−</button><output data-q="${p.id}">0</output><button type="button" data-id="${p.id}" data-d="1" aria-label="增加數量">＋</button></div></div></div></article>`).join('')||'<p class="empty">目前沒有上架商品</p>'}
 function calcDiscount(subtotal,qty,rules,mode){const list=[];for(const r of rules){if(qty<r.threshold_qty)continue;const times=r.repeatable?Math.floor(qty/r.threshold_qty):1;let amount=0;if(r.rule_type==='bundle_price')amount=Math.max(0,times*((subtotal/qty)*r.threshold_qty-r.value));if(r.rule_type==='qty_amount_off')amount=r.value*times;if(r.rule_type==='qty_percent_off')amount=Math.floor(subtotal*r.value/100);list.push({amount:Math.min(subtotal,Math.floor(amount)),stackable:r.stackable})}if(!list.length)return 0;if(mode==='stack'){const sum=list.filter(x=>x.stackable).reduce((s,x)=>s+x.amount,0);return Math.min(subtotal,sum||Math.max(...list.map(x=>x.amount)))}return Math.max(...list.map(x=>x.amount))}
@@ -16,10 +36,23 @@ function setBusy(button,busy,label){button.disabled=busy;button.querySelector('.
 async function submit(e){e.preventDefault();const form=e.currentTarget,b=$('submit');$('formError').textContent='';if(!validate(form))return;if(!state.requestId)state.requestId=crypto.randomUUID().replaceAll('-','');const d=Object.fromEntries(new FormData(form)),payload={shop:state.shop,idToken:state.idToken,requestId:state.requestId,...d,phone:d.phone.replace(/\D/g,''),store:{name:d.storeName,code:d.storeCode,address:d.storeAddress},items:Object.entries(state.qty).filter(([,q])=>q).map(([productId,quantity])=>({productId,quantity}))};setBusy(b,true,'訂單建立中…');try{const r=await api('/api/orders',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});state.lastOrder={orderNo:r.orderNo,phone:payload.phone};localStorage.setItem('lastOrder-'+state.shop,JSON.stringify(state.lastOrder));$('checkoutDialog').close();$('successNo').textContent=r.orderNo;$('successText').textContent=`共 ${r.qty||totals().qty} 件，應付 ${money(r.total)}`;$('success').showModal();state.qty={};state.requestId='';form.reset();await init()}catch(err){$('formError').textContent=err.message;$('formError').scrollIntoView({behavior:'smooth',block:'center'})}finally{setBusy(b,false,'送出訂單')}}
 const status=s=>({new:'已收到訂單，等待出貨',shipped:'已出貨',cancelled:'已取消'}[s]||s);
 async function lookup(e){e?.preventDefault();const b=$('lookupSubmit');$('lookupError').textContent='';$('lookupResult').innerHTML='<p class="muted">訂單載入中…</p>';b.disabled=true;b.textContent='查詢中…';try{const orders=await api('/api/orders/mine?shop='+encodeURIComponent(state.shop),{headers:{authorization:'Bearer '+state.idToken}});$('lookupResult').innerHTML=orders.length?orders.map(r=>`<article class="order-result"><small>${esc(r.created_at)}</small><h3>${esc(r.order_no)}</h3><p class="status ${esc(r.status)}">${esc(status(r.status))}</p><div class="result-lines">${r.items.map(x=>`<div><span>${esc(x.product_name)} × ${x.quantity}</span><b>${money(x.unit_price*x.quantity)}</b></div>`).join('')}</div><div class="result-total"><span>訂單總額</span><b>${money(r.total)}</b></div>${r.tracking_no?`<p>物流單號：<strong>${esc(r.tracking_no)}</strong></p>`:'<p class="muted">商家出貨後，物流單號會顯示在這裡。</p>'}</article>`).join(''):'<p class="empty">目前還沒有訂單</p>'}catch(err){$('lookupError').textContent=err.message;$('lookupResult').innerHTML=''}finally{b.disabled=false;b.textContent='重新整理訂單'}}
-function saveCheckout(){const form=Object.fromEntries(new FormData($('checkoutForm')));sessionStorage.setItem('checkout-'+state.shop,JSON.stringify({qty:state.qty,form}))}
-function restoreCheckout(){const saved=JSON.parse(sessionStorage.getItem('checkout-'+state.shop)||'null');if(saved){state.qty=saved.qty||{};for(const [k,v] of Object.entries(saved.form||{})){const el=$('checkoutForm').elements[k];if(el&&el.type!=='radio')el.value=v}}if(params.get('cvs')==='1'){const f=$('checkoutForm').elements;f.storeCode.value=params.get('storeCode')||'';f.storeName.value=params.get('storeName')||'';f.storeAddress.value=params.get('storeAddress')||'';document.querySelector('input[name="delivery"][value="711"]').checked=true;showStore();history.replaceState({},'',location.pathname+'?shop='+encodeURIComponent(state.shop));$('checkoutDialog').showModal();sessionStorage.removeItem('checkout-'+state.shop)}}
+function saveCheckout(){const form=Object.fromEntries(new FormData($('checkoutForm')));sessionStorage.setItem('checkout-'+state.shop,JSON.stringify({qty:state.qty,form,savedAt:Date.now()}))}
+function restoreCheckout(){
+  const key='checkout-'+state.shop,isStoreReturn=params.get('cvs')==='1';
+  if(!isStoreReturn){sessionStorage.removeItem(key);state.qty={};return}
+  let saved=null;
+  try{saved=JSON.parse(sessionStorage.getItem(key)||'null')}catch(_){saved=null}
+  if(saved&&Date.now()-Number(saved.savedAt||0)<15*60*1000){
+    state.qty=saved.qty||{};
+    for(const [k,v] of Object.entries(saved.form||{})){const el=$('checkoutForm').elements[k];if(el&&el.type!=='radio')el.value=v}
+  }
+  const f=$('checkoutForm').elements;
+  f.storeCode.value=params.get('storeCode')||'';f.storeName.value=params.get('storeName')||'';f.storeAddress.value=params.get('storeAddress')||'';
+  const delivery711=document.querySelector('input[name="delivery"][value="711"]');if(delivery711)delivery711.checked=true;
+  showStore();history.replaceState({},'',location.pathname+'?shop='+encodeURIComponent(state.shop));$('checkoutDialog').showModal();sessionStorage.removeItem(key)
+}
 function showStore(){const f=$('checkoutForm').elements,has=f.storeCode.value;$('selectedStore').hidden=!has;if(has){$('selectedStoreName').textContent=f.storeName.value;$('selectedStoreCode').textContent='店號 '+f.storeCode.value;$('selectedStoreAddress').textContent=f.storeAddress.value;$('selectStore').textContent='重新選擇門市';$('storeError').textContent=''}}
 function chooseStore(){saveCheckout();const collection=$('checkoutForm').elements.payment.value==='cod'?'Y':'N';location.href=cfg.API_BASE_URL+'/api/ecpay/map?shop='+encodeURIComponent(state.shop)+'&collection='+collection}
 function openLookup(){$('lookup').showModal();lookup()}
 $('products').onclick=e=>{const b=e.target.closest('[data-d]');if(!b)return;const p=state.data.products.find(x=>x.id===b.dataset.id),next=Math.max(0,(state.qty[p.id]||0)+Number(b.dataset.d));state.qty[p.id]=p.track_stock?Math.min(p.stock,next):next;update()};
-$('selectStore').onclick=chooseStore;$('checkout').onclick=async()=>{try{if(state.authPromise)await state.authPromise;if(!state.idToken)throw new Error('請先完成 LINE 登入');$('checkoutDialog').showModal();delivery();update()}catch(e){$('lineUser').textContent=e.message}};$('checkoutForm').onsubmit=submit;$('checkoutForm').onchange=delivery;$('lookupOpen').onclick=()=>openLookup();$('lookupForm').onsubmit=lookup;$('successLookup').onclick=()=>{$('success').close();openLookup()};document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>$(b.dataset.close).close());boot();
+$('selectStore').onclick=chooseStore;$('checkout').onclick=async()=>{const b=$('checkout'),old=b.textContent;try{b.disabled=true;b.textContent='正在開啟結帳…';if(state.authPromise)await withTimeout(state.authPromise,12000,'LINE 登入連線逾時，請重新整理');if(!state.idToken)throw new Error('請先完成 LINE 登入');$('checkoutDialog').showModal();delivery();update()}catch(e){$('lineUser').textContent=e.message||'無法開啟結帳，請重新整理'}finally{b.textContent=old;update()}};$('checkoutForm').onsubmit=submit;$('checkoutForm').onchange=delivery;$('lookupOpen').onclick=()=>openLookup();$('lookupForm').onsubmit=lookup;$('successLookup').onclick=()=>{$('success').close();openLookup()};document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>$(b.dataset.close).close());boot();
