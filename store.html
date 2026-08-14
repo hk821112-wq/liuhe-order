@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#faf7f3">
+  <meta name="description" content="線上選購與訂單查詢">
+  <title>線上選購</title>
+  <link rel="stylesheet" href="./store.css?v=4">
+</head>
+<body>
+  <header class="top">
+    <div><small>線上選購</small><h1 id="storeName">商店載入中</h1><p id="description"></p></div>
+    <div class="account"><span id="lineUser">LINE 登入中…</span><button id="lookupOpen" type="button">我的訂單</button></div>
+  </header>
+  <main>
+    <aside id="announcement" hidden></aside>
+    <section class="intro"><div><h2>選擇商品</h2><p id="offerHint">價格與優惠由系統自動計算</p></div><span id="orderState"></span></section>
+    <section id="products" class="products" aria-live="polite"><div class="loading">正在載入商品…</div></section>
+  </main>
+  <footer class="cart"><div><small id="cartLabel">尚未選購</small><strong id="cartTotal">NT$0</strong></div><button id="checkout" type="button" disabled>前往結帳</button></footer>
+
+  <dialog id="checkoutDialog" class="sheet">
+    <form id="checkoutForm" novalidate>
+      <header class="sheet-head">
+        <button class="back" type="button" data-close="checkoutDialog" aria-label="返回選購">←</button>
+        <div><small>確認資料</small><h2>完成你的訂單</h2></div>
+        <button class="close" type="button" data-close="checkoutDialog" aria-label="關閉">×</button>
+      </header>
+      <section class="form-section">
+        <h3>收件人</h3>
+        <label>真實姓名<input name="customerName" autocomplete="name" maxlength="40" placeholder="請輸入收件人姓名" required><span class="field-error"></span></label>
+        <label>手機號碼<input name="phone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="09xxxxxxxx" required><span class="field-error"></span></label>
+      </section>
+      <section class="form-section">
+        <h3>配送方式</h3>
+        <div class="choice-grid">
+          <label id="delivery711" class="choice"><input type="radio" name="delivery" value="711" checked><span><b>7-11 超商取貨</b><small>到店後取貨</small></span></label>
+          <label id="deliveryHome" class="choice"><input type="radio" name="delivery" value="home"><span><b>宅配到府</b><small>配送至指定地址</small></span></label>
+        </div>
+        <div id="storeFields" class="delivery-fields">
+          <p class="notice">請透過綠界電子地圖選擇門市，門市資料不可手動修改。</p>
+          <button id="selectStore" class="store-picker" type="button">選擇 7-11 取貨門市</button>
+          <div id="selectedStore" class="selected-store" hidden><b id="selectedStoreName"></b><span id="selectedStoreCode"></span><p id="selectedStoreAddress"></p></div>
+          <input name="storeName" type="hidden"><input name="storeCode" type="hidden"><input name="storeAddress" type="hidden"><span id="storeError" class="field-error"></span>
+        </div>
+        <label id="homeField" hidden>宅配地址<input name="homeAddress" maxlength="180" autocomplete="street-address" placeholder="縣市、區域與完整地址"><span class="field-error"></span></label>
+      </section>
+      <section class="form-section">
+        <h3>付款與備註</h3>
+        <label>付款方式<select name="payment"><option value="cod">取貨付款</option><option value="transfer">轉帳付款</option></select></label>
+        <label>訂單備註（選填）<textarea name="note" maxlength="300" placeholder="例如：希望週末到貨"></textarea></label>
+      </section>
+      <section class="form-section order-review"><h3>訂單明細</h3><div id="checkoutItems"></div><div id="summary" class="summary"></div></section>
+      <p id="formError" class="error" role="alert"></p>
+      <div class="form-actions"><button type="button" data-close="checkoutDialog">返回重新選購</button><button id="submit" class="primary" type="submit"><span class="button-label">送出訂單</span><span class="spinner" hidden></span></button></div>
+    </form>
+  </dialog>
+
+  <dialog id="success" class="message-dialog"><section><span class="success-mark">✓</span><p class="success">訂單已成立</p><h2 id="successNo"></h2><p id="successText"></p><p class="muted">請保存訂單編號，可使用手機號碼查詢進度。</p><div class="success-actions"><button id="successLookup" class="primary" type="button">查看這筆訂單</button><button data-close="success" type="button">繼續選購</button></div></section></dialog>
+
+  <dialog id="lookup" class="sheet lookup-sheet"><form id="lookupForm"><header class="sheet-head"><div><small>出貨進度</small><h2>我的訂單</h2></div><button class="close" type="button" data-close="lookup" aria-label="關閉">×</button></header><button id="lookupSubmit" class="primary" type="submit">重新整理訂單</button><p id="lookupError" class="error"></p><div id="lookupResult"></div></form></dialog>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script><script src="./config.js?v=6"></script><script src="./store.js?v=6"></script>
+</body>
+</html>
