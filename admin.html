@@ -1,1 +1,76 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>攤商訂單平台｜商家後台</title><link rel="stylesheet" href="./admin.css"></head><body><main class="shell"><header id="adminHeader"><div><small>通用型攤商訂單平台</small><h1 id="title">商家後台</h1></div><button id="logout" class="link" hidden>登出</button></header><section id="login" class="login"><form id="loginForm"><p>商家專用</p><h2>登入管理商店</h2><label>商店代碼<input name="shop" value="liuhe" required></label><label>帳號<input name="username" autocomplete="username" required></label><label>密碼<input name="password" type="password" autocomplete="current-password" required></label><label class="remember"><input name="remember" type="checkbox" checked><span>保持登入</span></label><p class="remember-note">勾選後，此裝置關閉網頁再開仍會保持登入。</p><button>登入後台</button><p id="loginError" class="error"></p></form></section><section id="app" hidden><nav><button data-tab="settings" class="active">商店設定</button><button data-tab="products">商品管理</button><button data-tab="discounts">優惠管理</button></nav><div id="settings" class="panel"></div><div id="products" class="panel" hidden></div><div id="discounts" class="panel" hidden></div></section></main><dialog id="editor"><form id="editorForm"><header><h2 id="editorTitle"></h2><button type="button" id="editorClose">×</button></header><div id="editorFields"></div><p id="editorError" class="error"></p><button class="primary">儲存</button></form></dialog><div id="toast" hidden></div><script src="./config.js"></script><script src="./admin.js"></script></body></html>
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <title>攤商訂單平台｜商家後台</title>
+    <link rel="stylesheet" href="./admin.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header id="adminHeader">
+        <div>
+          <small>通用型攤商訂單平台</small>
+          <h1 id="title">商家後台</h1>
+        </div>
+        <button id="logout" class="link" hidden>登出</button>
+      </header>
+      <section id="login" class="login">
+        <form id="loginForm">
+          <p>商家專用</p>
+          <h2>登入管理商店</h2>
+          <label>商店代碼<input name="shop" value="liuhe" required /></label
+          ><label
+            >帳號<input
+              name="username"
+              autocomplete="username"
+              required /></label
+          ><label
+            >密碼<input
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required /></label
+          ><label class="remember"
+            ><input name="remember" type="checkbox" checked /><span
+              >保持登入</span
+            ></label
+          >
+          <p class="remember-note">勾選後，此裝置關閉網頁再開仍會保持登入。</p>
+          <button>登入後台</button>
+          <p id="loginError" class="error"></p>
+        </form>
+      </section>
+      <section id="app" hidden>
+        <nav>
+          <button data-tab="orders" class="active">訂單管理</button
+          ><button data-tab="products">商品管理</button
+          ><button data-tab="discounts">優惠管理</button
+          ><button data-tab="settings">商店設定</button
+          ><button id="logoutNav" class="nav-logout" type="button">登出</button>
+        </nav>
+        <div id="orders" class="panel"></div>
+        <div id="products" class="panel" hidden></div>
+        <div id="discounts" class="panel" hidden></div>
+        <div id="settings" class="panel" hidden></div>
+      </section>
+    </main>
+    <dialog id="editor">
+      <form id="editorForm">
+        <header>
+          <h2 id="editorTitle"></h2>
+          <button type="button" id="editorClose">×</button>
+        </header>
+        <div id="editorFields"></div>
+        <p id="editorError" class="error"></p>
+        <button class="primary">儲存</button>
+      </form>
+    </dialog>
+    <div id="toast" hidden></div>
+    <script src="./config.js"></script>
+    <script src="./admin.js"></script>
+  </body>
+</html>

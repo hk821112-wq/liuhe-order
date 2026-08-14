@@ -1,19 +1,276 @@
-const cfg=window.PLATFORM_CONFIG,$=id=>document.getElementById(id),state={token:localStorage.getItem('stallAdminToken')||sessionStorage.getItem('stallAdminToken')||'',data:null,edit:null};
-async function api(path,options={}){const r=await fetch(cfg.API_BASE_URL+path,{...options,headers:{...(options.headers||{}),...(state.token?{authorization:`Bearer ${state.token}`}:{})}}),d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw new Error(d.error?.message||'連線失敗');return d.result}
-const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));const checked=v=>Number(v)?'checked':'';const input=(label,name,value='',type='text')=>`<label>${label}<input name="${name}" type="${type}" value="${esc(value)}"></label>`;const toggle=(label,name,value)=>`<label class="switch"><input name="${name}" type="checkbox" ${checked(value)}>${label}</label>`;
-async function login(e){e.preventDefault();$('loginError').textContent='';const b=e.submitter;b.disabled=true;b.textContent='登入中…';try{const d=Object.fromEntries(new FormData(e.currentTarget)),remember=d.remember==='on';delete d.remember;const r=await api('/api/admin/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)});state.token=r.token;localStorage.removeItem('stallAdminToken');sessionStorage.removeItem('stallAdminToken');(remember?localStorage:sessionStorage).setItem('stallAdminToken',r.token);if(remember)localStorage.setItem('stallAdminRemember',JSON.stringify({shop:d.shop,username:d.username}));else localStorage.removeItem('stallAdminRemember');await load()}catch(err){$('loginError').textContent=err.message}finally{b.disabled=false;b.textContent='登入後台'}}
-async function load(){try{state.data=await api('/api/admin/bootstrap');$('login').hidden=true;$('app').hidden=false;$('logout').hidden=false;$('title').textContent=state.data.merchant.name+'｜商家後台';render()}catch(err){logout();$('loginError').textContent=err.message}}
-function render(){renderSettings();renderProducts();renderDiscounts()}
-function renderSettings(){const m=state.data.merchant;$('settings').innerHTML=`<div class="section-head"><div><h2>商店與訂購規則</h2><p>修改後將套用於這間商店，不影響其他商家。</p></div></div><form id="settingsForm" class="card"><div class="grid">${input('商店名稱','name',m.name)}${input('品牌色','theme_color',m.theme_color,'color')}</div>${input('商店簡介','description',m.description)}${input('商店公告','announcement',m.announcement)}<div class="grid">${input('最低訂購件數','min_order_qty',m.min_order_qty,'number')}${input('每筆最高件數','max_order_qty',m.max_order_qty,'number')}${input('7-11 運費','shipping_711',m.shipping_711,'number')}${input('宅配運費','shipping_home',m.shipping_home,'number')}${input('滿多少免運','free_shipping_threshold',m.free_shipping_threshold,'number')}<label>優惠套用方式<select name="discount_mode"><option value="best" ${m.discount_mode==='best'?'selected':''}>只套用最優惠</option><option value="stack" ${m.discount_mode==='stack'?'selected':''}>允許可累積優惠</option></select></label></div><div class="grid">${toggle('開放接單','order_open',m.order_open)}${toggle('開放 7-11 取貨','allow_711',m.allow_711)}${toggle('開放宅配','allow_home',m.allow_home)}${toggle('開啟滿額免運','free_shipping_enabled',m.free_shipping_enabled)}</div><button class="primary">儲存商店設定</button></form>`;$('settingsForm').onsubmit=saveSettings}
-function renderProducts(){$('products').innerHTML=`<div class="section-head"><div><h2>商品管理</h2><p>可新增、上下架、調整價格、庫存及商品圖片。</p></div><button id="addProduct">＋ 新增商品</button></div>${state.data.products.map(p=>`<article class="card product"><img src="${esc(p.image_url||'')}" alt=""><div><h3>${esc(p.name)} <span class="badge">${p.enabled?'上架':'下架'}</span></h3><p>${esc(p.spec)}・NT$${p.price}・庫存 ${p.stock}</p><p>${esc(p.description)}</p></div><div class="actions"><button data-edit-product="${p.id}">編輯</button><button class="danger" data-remove-product="${p.id}">移除</button></div></article>`).join('')||'<div class="card">尚未建立商品</div>'}`;$('addProduct').onclick=()=>openProduct({enabled:1,track_stock:1,stock:0,price:0,sort_order:999});document.querySelectorAll('[data-edit-product]').forEach(b=>b.onclick=()=>openProduct(state.data.products.find(p=>p.id===b.dataset.editProduct)));document.querySelectorAll('[data-remove-product]').forEach(b=>b.onclick=()=>removeProduct(b.dataset.removeProduct))}
-function renderDiscounts(){$('discounts').innerHTML=`<div class="section-head"><div><h2>優惠規則</h2><p>支援固定組合價、滿件減額與滿件折扣。</p></div><button id="addDiscount">＋ 新增優惠</button></div>${state.data.discounts.map(d=>`<article class="card"><h3>${esc(d.name)} <span class="badge">${d.enabled?'啟用':'停用'}</span></h3><p>${ruleText(d)}・${d.repeatable?'可重複計算':'只計算一次'}・${d.stackable?'可與其他優惠累積':'不可累積'}</p><div class="actions"><button data-edit-discount="${d.id}">編輯</button><button class="danger" data-remove-discount="${d.id}">停用</button></div></article>`).join('')||'<div class="card">尚未建立優惠</div>'}`;$('addDiscount').onclick=()=>openDiscount({rule_type:'bundle_price',threshold_qty:3,value:0,priority:100,enabled:1});document.querySelectorAll('[data-edit-discount]').forEach(b=>b.onclick=()=>openDiscount(state.data.discounts.find(d=>d.id===b.dataset.editDiscount)));document.querySelectorAll('[data-remove-discount]').forEach(b=>b.onclick=()=>removeDiscount(b.dataset.removeDiscount))}
-function ruleText(d){return d.rule_type==='bundle_price'?`每 ${d.threshold_qty} 件固定 NT$${d.value}`:d.rule_type==='qty_amount_off'?`滿 ${d.threshold_qty} 件減 NT$${d.value}`:`滿 ${d.threshold_qty} 件打 ${100-d.value}%`}
-async function saveSettings(e){e.preventDefault();const d=formObject(e.currentTarget);await api('/api/admin/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(d)});toast('商店設定已儲存');await load()}
-function openProduct(p){state.edit={type:'product'};$('editorTitle').textContent=p.id?'編輯商品':'新增商品';$('editorFields').innerHTML=`<input type="hidden" name="id" value="${esc(p.id||'')}"><div class="grid">${input('商品名稱','name',p.name)}${input('商品編號 SKU','sku',p.sku)}${input('規格','spec',p.spec)}${input('售價','price',p.price,'number')}${input('原價／劃線價','compare_price',p.compare_price,'number')}${input('庫存','stock',p.stock,'number')}${input('低庫存警示值','low_stock_threshold',p.low_stock_threshold,'number')}${input('排序','sort_order',p.sort_order,'number')}</div><label>商品說明<textarea name="description">${esc(p.description||'')}</textarea></label><label>商品圖片<input id="imageFile" type="file" accept="image/jpeg,image/png,image/webp"><input name="image_url" value="${esc(p.image_url||'')}" placeholder="上傳後自動填入圖片網址"></label><div class="grid">${toggle('上架販售','enabled',p.enabled)}${toggle('追蹤庫存','track_stock',p.track_stock)}${toggle('缺貨仍可接單','allow_oversell',p.allow_oversell)}</div>`;$('imageFile').onchange=upload;$('editor').showModal()}
-function openDiscount(d){state.edit={type:'discount'};$('editorTitle').textContent=d.id?'編輯優惠':'新增優惠';$('editorFields').innerHTML=`<input type="hidden" name="id" value="${esc(d.id||'')}">${input('優惠名稱','name',d.name)}<label>優惠類型<select name="rule_type"><option value="bundle_price" ${d.rule_type==='bundle_price'?'selected':''}>幾件固定價</option><option value="qty_amount_off" ${d.rule_type==='qty_amount_off'?'selected':''}>滿件減固定金額</option><option value="qty_percent_off" ${d.rule_type==='qty_percent_off'?'selected':''}>滿件折百分比</option></select></label><div class="grid">${input('達成件數','threshold_qty',d.threshold_qty,'number')}${input('固定價／減額／折扣百分比','value',d.value,'number')}${input('優先順序（小的先算）','priority',d.priority,'number')}</div><div class="grid">${toggle('啟用優惠','enabled',d.enabled)}${toggle('可重複計算','repeatable',d.repeatable)}${toggle('可和其他優惠累積','stackable',d.stackable)}</div>`;$('editor').showModal()}
-async function saveEditor(e){e.preventDefault();const d=formObject(e.currentTarget),path=state.edit.type==='product'?'/api/admin/products':'/api/admin/discounts';try{await api(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)});$('editor').close();toast('儲存完成');await load()}catch(err){$('editorError').textContent=err.message}}
-async function upload(e){const file=e.target.files[0];if(!file)return;toast('圖片上傳中…');const r=await api('/api/admin/upload',{method:'POST',headers:{'content-type':file.type},body:file});$('editorForm').elements.image_url.value=r.url;toast('圖片已上傳')}
-async function removeProduct(id){if(!confirm('確定移除此商品？歷史訂單仍會保留。'))return;await api('/api/admin/products/'+encodeURIComponent(id),{method:'DELETE'});await load()}
-async function removeDiscount(id){if(!confirm('確定停用此優惠？'))return;await api('/api/admin/discounts/'+encodeURIComponent(id),{method:'DELETE'});await load()}
-function formObject(form){const d=Object.fromEntries(new FormData(form));form.querySelectorAll('input[type=checkbox]').forEach(x=>d[x.name]=x.checked);return d}function toast(t){$('toast').textContent=t;$('toast').hidden=false;setTimeout(()=>$('toast').hidden=true,2200)}function logout(){state.token='';localStorage.removeItem('stallAdminToken');sessionStorage.removeItem('stallAdminToken');$('app').hidden=true;$('logout').hidden=true;$('login').hidden=false}
-const remembered=JSON.parse(localStorage.getItem('stallAdminRemember')||'null');if(remembered){document.getElementById('loginForm').elements.shop.value=remembered.shop||'liuhe';document.getElementById('loginForm').elements.username.value=remembered.username||'';document.getElementById('loginForm').elements.remember.checked=true}$('loginForm').onsubmit=login;$('logout').onclick=logout;$('editorClose').onclick=()=>$('editor').close();$('editorForm').onsubmit=saveEditor;document.querySelector('nav').onclick=e=>{const b=e.target.closest('[data-tab]');if(!b)return;document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.panel').forEach(x=>x.hidden=x.id!==b.dataset.tab)};if(state.token)load();
+const cfg = window.PLATFORM_CONFIG,
+  $ = (id) => document.getElementById(id),
+  state = {
+    token:
+      localStorage.getItem("stallAdminToken") ||
+      sessionStorage.getItem("stallAdminToken") ||
+      "",
+    data: null,
+    edit: null,
+    orderFilter: "new",
+  };
+async function api(path, options = {}) {
+  const r = await fetch(cfg.API_BASE_URL + path, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
+      },
+    }),
+    d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.ok) throw new Error(d.error?.message || "連線失敗");
+  return d.result;
+}
+const esc = (v) =>
+  String(v ?? "").replace(
+    /[&<>'"]/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[
+        c
+      ],
+  );
+const checked = (v) => (Number(v) ? "checked" : "");
+const input = (label, name, value = "", type = "text") =>
+  `<label>${label}<input name="${name}" type="${type}" value="${esc(value)}"></label>`;
+const toggle = (label, name, value) =>
+  `<label class="switch"><input name="${name}" type="checkbox" ${checked(value)}>${label}</label>`;
+async function login(e) {
+  e.preventDefault();
+  $("loginError").textContent = "";
+  const b = e.submitter;
+  b.disabled = true;
+  b.textContent = "登入中…";
+  try {
+    const d = Object.fromEntries(new FormData(e.currentTarget)),
+      remember = d.remember === "on";
+    delete d.remember;
+    const r = await api("/api/admin/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(d),
+    });
+    state.token = r.token;
+    localStorage.removeItem("stallAdminToken");
+    sessionStorage.removeItem("stallAdminToken");
+    (remember ? localStorage : sessionStorage).setItem(
+      "stallAdminToken",
+      r.token,
+    );
+    if (remember)
+      localStorage.setItem(
+        "stallAdminRemember",
+        JSON.stringify({ shop: d.shop, username: d.username }),
+      );
+    else localStorage.removeItem("stallAdminRemember");
+    await load();
+  } catch (err) {
+    $("loginError").textContent = err.message;
+  } finally {
+    b.disabled = false;
+    b.textContent = "登入後台";
+  }
+}
+async function load() {
+  try {
+    state.data = await api("/api/admin/bootstrap");
+    $("login").hidden = true;
+    $("app").hidden = false;
+    $("logout").hidden = false;
+    $("title").textContent = state.data.merchant.name + "｜商家後台";
+    render();
+  } catch (err) {
+    logout();
+    $("loginError").textContent = err.message;
+  }
+}
+function render() {
+  renderOrders();
+  renderSettings();
+  renderProducts();
+  renderDiscounts();
+}
+async function renderOrders(){const box=$("orders");box.innerHTML='<div class="loading-state">訂單載入中…</div>';try{const orders=await api('/api/admin/orders?status='+encodeURIComponent(state.orderFilter));const counts={new:0,shipped:0,cancelled:0};orders.forEach(o=>counts[o.status]=(counts[o.status]||0)+1);box.innerHTML=`<div class="section-head orders-head"><div><small>ORDER DESK</small><h2>訂單管理</h2><p>收到訂單、安排出貨並更新物流單號。</p></div><button id="refreshOrders">重新整理</button></div><div class="order-filters">${[['new','等待出貨'],['shipped','已出貨'],['cancelled','已取消'],['all','全部訂單']].map(([v,t])=>`<button data-order-filter="${v}" class="${state.orderFilter===v?'active':''}">${t}</button>`).join('')}</div><div class="order-list">${orders.map(orderCard).join('')||'<div class="empty-state"><b>目前沒有訂單</b><span>新訂單建立後會出現在這裡。</span></div>'}</div>`;$("refreshOrders").onclick=renderOrders;document.querySelectorAll('[data-order-filter]').forEach(b=>b.onclick=()=>{state.orderFilter=b.dataset.orderFilter;renderOrders()});document.querySelectorAll('[data-ship]').forEach(b=>b.onclick=()=>shipOrder(b.dataset.ship,false));document.querySelectorAll('[data-tracking]').forEach(b=>b.onclick=()=>shipOrder(b.dataset.tracking,true));document.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=()=>cancelOrder(b.dataset.cancel))}catch(err){box.innerHTML=`<p class="error">${esc(err.message)}</p>`}}
+function orderCard(o){const destination=o.delivery==='711'?`${esc(o.store_name)}門市・${esc(o.store_code)}<br>${esc(o.store_address)}`:esc(o.home_address),statusText={new:'等待出貨',shipped:'已出貨',cancelled:'已取消'}[o.status]||o.status;return `<article class="order-card status-${o.status}"><header><div><span class="order-status">${statusText}</span><h3>${esc(o.order_no)}</h3><small>${esc(o.created_at)}</small></div><strong>NT$${Number(o.total).toLocaleString()}</strong></header><div class="order-meta"><p><b>${esc(o.customer_name)}</b><br><a href="tel:${esc(o.phone)}">${esc(o.phone)}</a></p><p>${destination}</p></div><div class="order-items">${o.items.map(i=>`<div><span>${esc(i.product_name)} ${esc(i.product_spec)} × ${i.quantity}</span><b>NT$${Number(i.unit_price*i.quantity).toLocaleString()}</b></div>`).join('')}</div>${o.note?`<p class="order-note">備註：${esc(o.note)}</p>`:''}${o.tracking_no?`<p class="tracking">物流單號 <b>${esc(o.tracking_no)}</b></p>`:''}<div class="order-actions">${o.status==='new'?`<button class="primary" data-ship="${o.id}">輸入單號並出貨</button><button class="danger" data-cancel="${o.id}">取消訂單</button>`:''}${o.status==='shipped'?`<button data-tracking="${o.id}">修改物流單號</button>`:''}</div></article>`}
+async function shipOrder(id,edit){const trackingNo=prompt(edit?'請輸入正確的新物流單號':'請輸入物流單號；確認後訂單會標記為已出貨');if(!trackingNo?.trim())return;await api('/api/admin/orders/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({action:edit?'tracking':'ship',trackingNo:trackingNo.trim()})});toast(edit?'物流單號已修改':'訂單已出貨');await renderOrders()}
+async function cancelOrder(id){const reason=prompt('請輸入取消原因','商家取消');if(reason===null)return;if(!confirm('確定取消這筆訂單？'))return;await api('/api/admin/orders/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({action:'cancel',reason})});toast('訂單已取消');await renderOrders()}
+function renderSettings() {
+  const m = state.data.merchant;
+  $("settings").innerHTML =
+    `<div class="section-head"><div><h2>商店與訂購規則</h2><p>修改後將套用於這間商店，不影響其他商家。</p></div></div><form id="settingsForm" class="card"><div class="grid">${input("商店名稱", "name", m.name)}${input("品牌色", "theme_color", m.theme_color, "color")}</div>${input("商店簡介", "description", m.description)}${input("商店公告", "announcement", m.announcement)}<div class="grid">${input("最低訂購件數", "min_order_qty", m.min_order_qty, "number")}${input("每筆最高件數", "max_order_qty", m.max_order_qty, "number")}${input("7-11 運費", "shipping_711", m.shipping_711, "number")}${input("宅配運費", "shipping_home", m.shipping_home, "number")}${input("滿多少免運", "free_shipping_threshold", m.free_shipping_threshold, "number")}<label>優惠套用方式<select name="discount_mode"><option value="best" ${m.discount_mode === "best" ? "selected" : ""}>只套用最優惠</option><option value="stack" ${m.discount_mode === "stack" ? "selected" : ""}>允許可累積優惠</option></select></label></div><div class="grid">${toggle("開放接單", "order_open", m.order_open)}${toggle("開放 7-11 取貨", "allow_711", m.allow_711)}${toggle("開放宅配", "allow_home", m.allow_home)}${toggle("開啟滿額免運", "free_shipping_enabled", m.free_shipping_enabled)}</div><button class="primary">儲存商店設定</button></form>`;
+  $("settingsForm").onsubmit = saveSettings;
+}
+function renderProducts() {
+  $("products").innerHTML =
+    `<div class="section-head"><div><h2>商品管理</h2><p>可新增、上下架、調整價格、庫存及商品圖片。</p></div><button id="addProduct">＋ 新增商品</button></div>${state.data.products.map((p) => `<article class="card product"><img src="${esc(p.image_url || "")}" alt=""><div><h3>${esc(p.name)} <span class="badge">${p.enabled ? "上架" : "下架"}</span></h3><p>${esc(p.spec)}・NT$${p.price}・庫存 ${p.stock}</p><p>${esc(p.description)}</p></div><div class="actions"><button data-edit-product="${p.id}">編輯</button><button class="danger" data-remove-product="${p.id}">移除</button></div></article>`).join("") || '<div class="card">尚未建立商品</div>'}`;
+  $("addProduct").onclick = () =>
+    openProduct({
+      enabled: 1,
+      track_stock: 1,
+      stock: 0,
+      price: 0,
+      sort_order: 999,
+    });
+  document
+    .querySelectorAll("[data-edit-product]")
+    .forEach(
+      (b) =>
+        (b.onclick = () =>
+          openProduct(
+            state.data.products.find((p) => p.id === b.dataset.editProduct),
+          )),
+    );
+  document
+    .querySelectorAll("[data-remove-product]")
+    .forEach((b) => (b.onclick = () => removeProduct(b.dataset.removeProduct)));
+}
+function renderDiscounts() {
+  $("discounts").innerHTML =
+    `<div class="section-head"><div><h2>優惠規則</h2><p>支援固定組合價、滿件減額與滿件折扣。</p></div><button id="addDiscount">＋ 新增優惠</button></div>${state.data.discounts.map((d) => `<article class="card"><h3>${esc(d.name)} <span class="badge">${d.enabled ? "啟用" : "停用"}</span></h3><p>${ruleText(d)}・${d.repeatable ? "可重複計算" : "只計算一次"}・${d.stackable ? "可與其他優惠累積" : "不可累積"}</p><div class="actions"><button data-edit-discount="${d.id}">編輯</button><button class="danger" data-remove-discount="${d.id}">停用</button></div></article>`).join("") || '<div class="card">尚未建立優惠</div>'}`;
+  $("addDiscount").onclick = () =>
+    openDiscount({
+      rule_type: "bundle_price",
+      threshold_qty: 3,
+      value: 0,
+      priority: 100,
+      enabled: 1,
+    });
+  document
+    .querySelectorAll("[data-edit-discount]")
+    .forEach(
+      (b) =>
+        (b.onclick = () =>
+          openDiscount(
+            state.data.discounts.find((d) => d.id === b.dataset.editDiscount),
+          )),
+    );
+  document
+    .querySelectorAll("[data-remove-discount]")
+    .forEach(
+      (b) => (b.onclick = () => removeDiscount(b.dataset.removeDiscount)),
+    );
+}
+function ruleText(d) {
+  return d.rule_type === "bundle_price"
+    ? `每 ${d.threshold_qty} 件固定 NT$${d.value}`
+    : d.rule_type === "qty_amount_off"
+      ? `滿 ${d.threshold_qty} 件減 NT$${d.value}`
+      : `滿 ${d.threshold_qty} 件打 ${100 - d.value}%`;
+}
+async function saveSettings(e) {
+  e.preventDefault();
+  const d = formObject(e.currentTarget);
+  await api("/api/admin/settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(d),
+  });
+  toast("商店設定已儲存");
+  await load();
+}
+function openProduct(p) {
+  state.edit = { type: "product" };
+  $("editorTitle").textContent = p.id ? "編輯商品" : "新增商品";
+  $("editorFields").innerHTML =
+    `<input type="hidden" name="id" value="${esc(p.id || "")}"><div class="grid">${input("商品名稱", "name", p.name)}${input("商品編號 SKU", "sku", p.sku)}${input("規格", "spec", p.spec)}${input("售價", "price", p.price, "number")}${input("原價／劃線價", "compare_price", p.compare_price, "number")}${input("庫存", "stock", p.stock, "number")}${input("低庫存警示值", "low_stock_threshold", p.low_stock_threshold, "number")}${input("排序", "sort_order", p.sort_order, "number")}</div><label>商品說明<textarea name="description">${esc(p.description || "")}</textarea></label><label>商品圖片<input id="imageFile" type="file" accept="image/jpeg,image/png,image/webp"><input name="image_url" value="${esc(p.image_url || "")}" placeholder="上傳後自動填入圖片網址"></label><div class="grid">${toggle("上架販售", "enabled", p.enabled)}${toggle("追蹤庫存", "track_stock", p.track_stock)}${toggle("缺貨仍可接單", "allow_oversell", p.allow_oversell)}</div>`;
+  $("imageFile").onchange = upload;
+  $("editor").showModal();
+}
+function openDiscount(d) {
+  state.edit = { type: "discount" };
+  $("editorTitle").textContent = d.id ? "編輯優惠" : "新增優惠";
+  $("editorFields").innerHTML =
+    `<input type="hidden" name="id" value="${esc(d.id || "")}">${input("優惠名稱", "name", d.name)}<label>優惠類型<select name="rule_type"><option value="bundle_price" ${d.rule_type === "bundle_price" ? "selected" : ""}>幾件固定價</option><option value="qty_amount_off" ${d.rule_type === "qty_amount_off" ? "selected" : ""}>滿件減固定金額</option><option value="qty_percent_off" ${d.rule_type === "qty_percent_off" ? "selected" : ""}>滿件折百分比</option></select></label><div class="grid">${input("達成件數", "threshold_qty", d.threshold_qty, "number")}${input("固定價／減額／折扣百分比", "value", d.value, "number")}${input("優先順序（小的先算）", "priority", d.priority, "number")}</div><div class="grid">${toggle("啟用優惠", "enabled", d.enabled)}${toggle("可重複計算", "repeatable", d.repeatable)}${toggle("可和其他優惠累積", "stackable", d.stackable)}</div>`;
+  $("editor").showModal();
+}
+async function saveEditor(e) {
+  e.preventDefault();
+  const d = formObject(e.currentTarget),
+    path =
+      state.edit.type === "product"
+        ? "/api/admin/products"
+        : "/api/admin/discounts";
+  try {
+    await api(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(d),
+    });
+    $("editor").close();
+    toast("儲存完成");
+    await load();
+  } catch (err) {
+    $("editorError").textContent = err.message;
+  }
+}
+async function upload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  toast("圖片上傳中…");
+  const r = await api("/api/admin/upload", {
+    method: "POST",
+    headers: { "content-type": file.type },
+    body: file,
+  });
+  $("editorForm").elements.image_url.value = r.url;
+  toast("圖片已上傳");
+}
+async function removeProduct(id) {
+  if (!confirm("確定移除此商品？歷史訂單仍會保留。")) return;
+  await api("/api/admin/products/" + encodeURIComponent(id), {
+    method: "DELETE",
+  });
+  await load();
+}
+async function removeDiscount(id) {
+  if (!confirm("確定停用此優惠？")) return;
+  await api("/api/admin/discounts/" + encodeURIComponent(id), {
+    method: "DELETE",
+  });
+  await load();
+}
+function formObject(form) {
+  const d = Object.fromEntries(new FormData(form));
+  form
+    .querySelectorAll("input[type=checkbox]")
+    .forEach((x) => (d[x.name] = x.checked));
+  return d;
+}
+function toast(t) {
+  $("toast").textContent = t;
+  $("toast").hidden = false;
+  setTimeout(() => ($("toast").hidden = true), 2200);
+}
+function logout() {
+  state.token = "";
+  localStorage.removeItem("stallAdminToken");
+  sessionStorage.removeItem("stallAdminToken");
+  $("app").hidden = true;
+  $("logout").hidden = true;
+  $("login").hidden = false;
+}
+const remembered = JSON.parse(
+  localStorage.getItem("stallAdminRemember") || "null",
+);
+if (remembered) {
+  document.getElementById("loginForm").elements.shop.value =
+    remembered.shop || "liuhe";
+  document.getElementById("loginForm").elements.username.value =
+    remembered.username || "";
+  document.getElementById("loginForm").elements.remember.checked = true;
+}
+$("loginForm").onsubmit = login;
+$("logout").onclick = logout;
+$("logoutNav").onclick = logout;
+$("editorClose").onclick = () => $("editor").close();
+$("editorForm").onsubmit = saveEditor;
+document.querySelector("nav").onclick = (e) => {
+  const b = e.target.closest("[data-tab]");
+  if (!b) return;
+  document
+    .querySelectorAll("nav button")
+    .forEach((x) => x.classList.toggle("active", x === b));
+  document
+    .querySelectorAll(".panel")
+    .forEach((x) => (x.hidden = x.id !== b.dataset.tab));
+};
+if (state.token) load();
